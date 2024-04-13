@@ -7,7 +7,7 @@ from util.metrics import PSNR
 
 class DeblurModel(nn.Module):
     def __init__(self):
-        super(DeblurModel, self).__init__()
+        super().__init__()
 
     def get_input(self, data):
         img = data['a']

@@ -1,6 +1,9 @@
+import os
+import math
 import torch
 import torch.nn as nn
-import math
+import torch.nn.functional as F
+from typing import Tuple
 
 import todos
 import pdb
@@ -52,8 +55,7 @@ class Embeddings(nn.Module):
         )
 
 
-    def forward(self, x):
-
+    def forward(self, x)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hx = self.en_layer1_1(x)
         hx = self.activation(self.en_layer1_2(hx) + hx)
         hx = self.activation(self.en_layer1_3(hx) + hx)
@@ -138,10 +140,9 @@ class Attention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
 
     def transpose_for_scores(self, x):
-        # print("x.size(): ", x.size())
         B, N, C = x.size()
-        attention_head_size = int(C / self.num_attention_heads)
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, attention_head_size)
+        attention_head_size = C // self.num_attention_heads
+        # new_x_shape = x.size()[:-1] + (self.num_attention_heads, attention_head_size)
         # print("new_x_shape: ", new_x_shape)
         # x = x.view(*new_x_shape)
         x = x.view(B, N, self.num_attention_heads, attention_head_size)
@@ -153,6 +154,7 @@ class Attention(nn.Module):
         key_layer = self.transpose_for_scores(key_layer)
         value_layer = self.transpose_for_scores(value_layer)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        # xxxx_8888
         _, _, _, d = query_layer.size()
         attention_scores = attention_scores / math.sqrt(d)
         attention_probs = self.softmax(attention_scores)
@@ -231,23 +233,30 @@ class Intra_SA(nn.Module):
         q_h, k_h, v_h = qkv_h[0], qkv_h[1], qkv_h[2]
         q_v, k_v, v_v = qkv_v[0], qkv_v[1], qkv_v[2]
 
-        if H == W:
-            query = torch.cat((q_h, q_v), dim=0)
-            key = torch.cat((k_h, k_v), dim=0)
-            value = torch.cat((v_h, v_v), dim=0)
-            attention_output = self.attn(query, key, value)
-            attention_output = torch.chunk(attention_output, 2, dim=0)
-            attention_output_h = attention_output[0]
-            attention_output_v = attention_output[1]
-            attention_output_h = attention_output_h.view(B, H, W, C//2).permute(0, 3, 1, 2).contiguous()
-            attention_output_v = attention_output_v.view(B, W, H, C//2).permute(0, 3, 2, 1).contiguous()
-            attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
-        else:
-            attention_output_h = self.attn(q_h, k_h, v_h)
-            attention_output_v = self.attn(q_v, k_v, v_v)
-            attention_output_h = attention_output_h.view(B, H, W, C//2).permute(0, 3, 1, 2).contiguous()
-            attention_output_v = attention_output_v.view(B, W, H, C//2).permute(0, 3, 2, 1).contiguous()
-            attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
+        # xxxx_8888
+        # if H == W:
+        #     query = torch.cat((q_h, q_v), dim=0)
+        #     key = torch.cat((k_h, k_v), dim=0)
+        #     value = torch.cat((v_h, v_v), dim=0)
+        #     attention_output = self.attn(query, key, value)
+        #     attention_output = torch.chunk(attention_output, 2, dim=0)
+        #     attention_output_h = attention_output[0]
+        #     attention_output_v = attention_output[1]
+        #     attention_output_h = attention_output_h.view(B, H, W, C//2).permute(0, 3, 1, 2).contiguous()
+        #     attention_output_v = attention_output_v.view(B, W, H, C//2).permute(0, 3, 2, 1).contiguous()
+        #     attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
+        # else:
+        #     attention_output_h = self.attn(q_h, k_h, v_h)
+        #     attention_output_v = self.attn(q_v, k_v, v_v)
+        #     attention_output_h = attention_output_h.view(B, H, W, C//2).permute(0, 3, 1, 2).contiguous()
+        #     attention_output_v = attention_output_v.view(B, W, H, C//2).permute(0, 3, 2, 1).contiguous()
+        #     attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
+
+        attention_output_h = self.attn(q_h, k_h, v_h)
+        attention_output_v = self.attn(q_v, k_v, v_v)
+        attention_output_h = attention_output_h.view(B, H, W, C//2).permute(0, 3, 1, 2).contiguous()
+        attention_output_v = attention_output_v.view(B, W, H, C//2).permute(0, 3, 2, 1).contiguous()
+        attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
 
         x = attn_out + h
         x = x.view(B, C, H*W).permute(0, 2, 1).contiguous()
@@ -303,24 +312,29 @@ class Inter_SA(nn.Module):
         vertical_groups = torch.chunk(vertical_groups, 3, dim=0)
         query_v, key_v, value_v = vertical_groups[0], vertical_groups[1], vertical_groups[2]
 
-
-        if H == W:
-            query = torch.cat((query_h, query_v), dim=0)
-            key = torch.cat((key_h, key_v), dim=0)
-            value = torch.cat((value_h, value_v), dim=0)
-            attention_output = self.attn(query, key, value)
-            attention_output = torch.chunk(attention_output, 2, dim=0)
-            attention_output_h = attention_output[0]
-            attention_output_v = attention_output[1]
-            attention_output_h = attention_output_h.view(B, H, C//2, W).permute(0, 2, 1, 3).contiguous()
-            attention_output_v = attention_output_v.view(B, W, C//2, H).permute(0, 2, 3, 1).contiguous()
-            attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
-        else:
-            attention_output_h = self.attn(query_h, key_h, value_h)
-            attention_output_v = self.attn(query_v, key_v, value_v)
-            attention_output_h = attention_output_h.view(B, H, C//2, W).permute(0, 2, 1, 3).contiguous()
-            attention_output_v = attention_output_v.view(B, W, C//2, H).permute(0, 2, 3, 1).contiguous()
-            attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
+        # xxxx_8888
+        # if H == W:
+        #     query = torch.cat((query_h, query_v), dim=0)
+        #     key = torch.cat((key_h, key_v), dim=0)
+        #     value = torch.cat((value_h, value_v), dim=0)
+        #     attention_output = self.attn(query, key, value)
+        #     attention_output = torch.chunk(attention_output, 2, dim=0)
+        #     attention_output_h = attention_output[0]
+        #     attention_output_v = attention_output[1]
+        #     attention_output_h = attention_output_h.view(B, H, C//2, W).permute(0, 2, 1, 3).contiguous()
+        #     attention_output_v = attention_output_v.view(B, W, C//2, H).permute(0, 2, 3, 1).contiguous()
+        #     attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
+        # else:
+        #     attention_output_h = self.attn(query_h, key_h, value_h)
+        #     attention_output_v = self.attn(query_v, key_v, value_v)
+        #     attention_output_h = attention_output_h.view(B, H, C//2, W).permute(0, 2, 1, 3).contiguous()
+        #     attention_output_v = attention_output_v.view(B, W, C//2, H).permute(0, 2, 3, 1).contiguous()
+        #     attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
+        attention_output_h = self.attn(query_h, key_h, value_h)
+        attention_output_v = self.attn(query_v, key_v, value_v)
+        attention_output_h = attention_output_h.view(B, H, C//2, W).permute(0, 2, 1, 3).contiguous()
+        attention_output_v = attention_output_v.view(B, W, C//2, H).permute(0, 2, 3, 1).contiguous()
+        attn_out = self.fuse_out(torch.cat((attention_output_h, attention_output_v), dim=1))
 
         x = attn_out + h
         x = x.view(B, C, H*W).permute(0, 2, 1).contiguous()
@@ -338,6 +352,10 @@ class Inter_SA(nn.Module):
 class Stripformer(nn.Module):
     def __init__(self):
         super().__init__()
+        self.MAX_H = 1024
+        self.MAX_W = 1024
+        self.MAX_TIMES = 8
+
         head_num = 5
         dim = 320
 
@@ -356,11 +374,18 @@ class Stripformer(nn.Module):
         self.Trans_block_12 = Inter_SA(dim, head_num)
         self.decoder = Embeddings_output()
         # pdb.set_trace()
+        self.load_weights(model_path="models/image_deblur.pth")
 
 
     def forward(self, x):
         # todos.debug.output_var("x", x)
         # tensor [x] size: [1, 3, 720, 1280], min: -0.480392, max: 0.5, mean: -0.115454
+        B, C, H, W = x.size()
+        pad_h = self.MAX_TIMES - (H % self.MAX_TIMES)
+        pad_w = self.MAX_TIMES - (W % self.MAX_TIMES)
+        x = F.pad(x, (0, pad_w, 0, pad_h), 'reflect')
+
+        x = x - 0.5
 
         hx, residual_1, residual_2 = self.encoder(x)
         hx = self.Trans_block_1(hx)
@@ -380,9 +405,22 @@ class Stripformer(nn.Module):
         # todos.debug.output_var("hx + x", hx + x)
         # tensor [hx + x] size: [1, 3, 720, 1280], min: -0.548948, max: 0.548041, mean: -0.115721
         output = hx + x
+        output = output.clamp(-0.5, 0.5) + 0.5
 
-        return output.clamp(-0.5, 0.5)
+        return output[:, :, 0:H, 0:W]
 
+    def load_weights(self, model_path):
+        cdir = os.path.dirname(__file__)
+        checkpoint = model_path if cdir == "" else cdir + "/" + model_path
+        print(f"Loading {checkpoint} ...")
 
+        state = torch.load(checkpoint)
+        new_state = {}
+        for k, v in state.items():
+            if k.startswith("module"):
+                k = k.replace("module.", "")
+            new_state[k] = v
+        self.load_state_dict(new_state)
 
-
+        # self.half().eval()
+        self.eval()

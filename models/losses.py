@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class Vgg19(torch.nn.Module):
     def __init__(self, requires_grad=False):
-        super(Vgg19, self).__init__()
+        super().__init__()
         vgg_pretrained_features = models.vgg19(pretrained=True).features
         self.slice1 = torch.nn.Sequential()
 
@@ -23,7 +23,7 @@ class Vgg19(torch.nn.Module):
 class ContrastLoss(nn.Module):
     def __init__(self, ablation=False):
 
-        super(ContrastLoss, self).__init__()
+        super().__init__()
         self.vgg = Vgg19().cuda()
         self.l1 = nn.L1Loss()
         self.ab = ablation
@@ -48,7 +48,7 @@ class ContrastLoss(nn.Module):
 
 class ContrastLoss_Ori(nn.Module):
     def __init__(self, ablation=False):
-        super(ContrastLoss_Ori, self).__init__()
+        super().__init__()
         self.vgg = Vgg19().cuda()
         self.l1 = nn.L1Loss()
         self.ab = ablation
@@ -66,7 +66,7 @@ class CharbonnierLoss(nn.Module):
     """Charbonnier Loss (L1)"""
 
     def __init__(self, eps=1e-3):
-        super(CharbonnierLoss, self).__init__()
+        super().__init__()
         self.eps = eps
 
     def forward(self, x, y):
@@ -78,7 +78,7 @@ class CharbonnierLoss(nn.Module):
 
 class EdgeLoss(nn.Module):
     def __init__(self):
-        super(EdgeLoss, self).__init__()
+        super().__init__()
         k = torch.Tensor([[.05, .25, .4, .25, .05]])
         self.kernel = torch.matmul(k.t(), k).unsqueeze(0).repeat(3, 1, 1, 1)
         if torch.cuda.is_available():
@@ -109,7 +109,7 @@ class EdgeLoss(nn.Module):
 class Stripformer_Loss(nn.Module):
 
     def __init__(self, ):
-        super(Stripformer_Loss, self).__init__()
+        super().__init__()
 
         self.char = CharbonnierLoss()
         self.edge = EdgeLoss()

@@ -19,7 +19,7 @@ if __name__ == '__main__':
     args = get_args()
     with open('config/config_Stripformer_gopro.yaml') as cfg:
         config = yaml.safe_load(cfg)
-    blur_path = './datasets/GoPro/test/blur/'
+    blur_path = './datasets/test/GoPro/'
     out_path = './out/Stripformer_GoPro_results'
     if not os.path.isdir(out_path):
         os.mkdir(out_path)
@@ -32,24 +32,27 @@ if __name__ == '__main__':
     total_image_number = 1111
 
     # warm-up
-    warm_up = 0
-    print('Hardware warm-up')
-    for file in os.listdir(blur_path):
-        for img_name in os.listdir(blur_path + '/' + file):
-            warm_up += 1
-            img = cv2.imread(blur_path + '/' + file + '/' + img_name)
-            img_tensor = torch.from_numpy(np.transpose(img / 255, (2, 0, 1)).astype('float32')) - 0.5
-            with torch.no_grad():
-                img_tensor = Variable(img_tensor.unsqueeze(0)).cuda()
-                result_image = model(img_tensor)
-            if warm_up == 20:
-                break
-        break
+    # warm_up = 0
+    # print('Hardware warm-up')
+    # for file in os.listdir(blur_path):
+    #     for img_name in os.listdir(blur_path + '/' + file):
+    #         warm_up += 1
+    #         img = cv2.imread(blur_path + '/' + file + '/' + img_name)
+    #         img_tensor = torch.from_numpy(np.transpose(img / 255, (2, 0, 1)).astype('float32')) - 0.5
+    #         with torch.no_grad():
+    #             img_tensor = Variable(img_tensor.unsqueeze(0)).cuda()
+    #             result_image = model(img_tensor)
+    #         if warm_up == 20:
+    #             break
+    #     break
 
     for file in os.listdir(blur_path):
         if not os.path.isdir(out_path + '/' + file):
             os.mkdir(out_path + '/' + file)
         for img_name in os.listdir(blur_path + '/' + file):
+            if not img_name.endswith("10.png"):
+                continue
+
             img = cv2.imread(blur_path + '/' + file + '/' + img_name)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_tensor = torch.from_numpy(np.transpose(img / 255, (2, 0, 1)).astype('float32')) - 0.5
